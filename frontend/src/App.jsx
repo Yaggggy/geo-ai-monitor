@@ -10,7 +10,7 @@ import "./App.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
-// This is a robust component to handle the Leaflet Draw controls.
+// Component to handle the Leaflet Draw controls
 const DrawControl = ({ onBboxChange }) => {
   const map = useMap();
   const drawnItemsRef = useRef(new L.FeatureGroup());
@@ -29,7 +29,7 @@ const DrawControl = ({ onBboxChange }) => {
         circlemarker: false,
         rectangle: {
           shapeOptions: { color: "#3498db" },
-          showArea: false, // Don't show area calculation on draw
+          showArea: false,
         },
       },
       edit: {
@@ -39,7 +39,7 @@ const DrawControl = ({ onBboxChange }) => {
     map.addControl(drawControl);
 
     const handleCreate = (e) => {
-      drawnItems.clearLayers(); // Ensure only one shape can be drawn
+      drawnItems.clearLayers();
       drawnItems.addLayer(e.layer);
       const bounds = e.layer.getBounds();
       onBboxChange([
@@ -64,7 +64,6 @@ const DrawControl = ({ onBboxChange }) => {
     };
 
     const handleDelete = () => {
-      // When layers are deleted, drawnItems becomes empty
       onBboxChange(null);
     };
 
@@ -72,7 +71,6 @@ const DrawControl = ({ onBboxChange }) => {
     map.on(L.Draw.Event.EDITED, handleEdit);
     map.on(L.Draw.Event.DELETED, handleDelete);
 
-    // Cleanup function to remove controls and listeners when component unmounts
     return () => {
       map.removeControl(drawControl);
       map.removeLayer(drawnItems);
@@ -88,17 +86,17 @@ const DrawControl = ({ onBboxChange }) => {
 function App() {
   const [bbox, setBbox] = useState(null);
   const [dates, setDates] = useState({ from: "", to: "" });
+  const [analysisType, setAnalysisType] = useState("ndvi"); // State for analysis type
   const [taskId, setTaskId] = useState(null);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // This callback is passed to the DrawControl to update the state
   const handleBboxChange = useCallback((newBbox) => {
     setBbox(newBbox);
   }, []);
 
-  // Polling logic to fetch results from the backend
+  // Polling logic to fetch results
   useEffect(() => {
     if (!taskId || loading === false) return;
     const interval = setInterval(async () => {
@@ -111,10 +109,7 @@ function App() {
           clearInterval(interval);
         } else if (response.data.status === "failed") {
           setError(
-            `Analysis failed: ${
-              response.data.error ||
-              "Please try a different area or date range."
-            }`
+            `Analysis failed: ${response.data.error || "Please try again."}`
           );
           setLoading(false);
           setTaskId(null);
@@ -126,7 +121,7 @@ function App() {
         setTaskId(null);
         clearInterval(interval);
       }
-    }, 5000); // Poll every 5 seconds
+    }, 5000);
     return () => clearInterval(interval);
   }, [taskId, loading]);
 
@@ -148,6 +143,7 @@ function App() {
         bbox: bbox,
         from_date: dates.from,
         to_date: dates.to,
+        analysis_type: analysisType, // Send the selected analysis type
       });
       setTaskId(response.data.task_id);
     } catch (err) {
@@ -156,13 +152,18 @@ function App() {
     }
   };
 
+  // Helper to get the correct result key from the response
+  const getResultValue = (resultObj, key) => {
+    const type = resultObj.analysis_type.toLowerCase();
+    return resultObj[`mean_${type}_${key}`];
+  };
+
   return (
     <div className="App">
       <header className="App-header">
         <h1>Geospatial AI: Environmental Change Monitor</h1>
         <p>
-          Use the tools on the map to draw, resize, or move your area of
-          interest.
+          Use the tools on the map to analyze changes in vegetation or water.
         </p>
       </header>
       <div className="content-wrapper">
@@ -183,6 +184,17 @@ function App() {
           <div className="controls">
             <h2>Controls</h2>
             <form onSubmit={handleSubmit}>
+              <div className="date-picker">
+                <label>Analysis Type:</label>
+                <select
+                  className="analysis-select"
+                  value={analysisType}
+                  onChange={(e) => setAnalysisType(e.target.value)}
+                >
+                  <option value="ndvi">Vegetation (NDVI)</option>
+                  <option value="ndwi">Water (NDWI)</option>
+                </select>
+              </div>
               <div className="date-picker">
                 <label>From:</label>
                 <input
@@ -215,10 +227,10 @@ function App() {
           )}
           {results && (
             <div className="results">
-              <h2>Analysis Results</h2>
+              <h2>{results.analysis_type} Analysis Results</h2>
               <div className="result-summary">
                 <h3>
-                  Change in Average NDVI:{" "}
+                  Change in Average {results.analysis_type}:{" "}
                   <span
                     className={
                       results.change_percentage >= 0 ? "positive" : "negative"
@@ -227,27 +239,29 @@ function App() {
                     {results.change_percentage}%
                   </span>
                 </h3>
-                <p>
-                  A higher NDVI value (closer to 1) generally indicates
-                  healthier, denser vegetation.
-                </p>
               </div>
               <div className="image-container">
                 <div className="image-card">
                   <h4>{results.from_date_str}</h4>
                   <img
                     src={results.image_from}
-                    alt={`NDVI map for ${results.from_date_str}`}
+                    alt={`Map for ${results.from_date_str}`}
                   />
-                  <p>Mean NDVI: {results.mean_ndvi_from}</p>
+                  <p>
+                    Mean {results.analysis_type}:{" "}
+                    {getResultValue(results, "from")}
+                  </p>
                 </div>
                 <div className="image-card">
                   <h4>{results.to_date_str}</h4>
                   <img
                     src={results.image_to}
-                    alt={`NDVI map for ${results.to_date_str}`}
+                    alt={`Map for ${results.to_date_str}`}
                   />
-                  <p>Mean NDVI: {results.mean_ndvi_to}</p>
+                  <p>
+                    Mean {results.analysis_type}:{" "}
+                    {getResultValue(results, "to")}
+                  </p>
                 </div>
               </div>
             </div>

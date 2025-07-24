@@ -1,96 +1,94 @@
-# backend/geospatial.py
-
 import os
 import numpy as np
+from datetime import datetime
 from sentinelhub import (
-    SentinelHubRequest, DataCollection, MimeType, CRS, BBox, SHConfig
+    SHConfig,
+    SentinelHubRequest,
+    DataCollection,
+    MimeType,
+    CRS,
+    BBox,
+    bbox_to_dimensions,
+    SentinelHubDownloadFailedException,
 )
-import base64
-from io import BytesIO
-from PIL import Image
 
+# Custom Exception
 class NoDataAvailableException(Exception):
     pass
 
-# --- Dictionary of Evalscripts ---
-EVALSCRIPTS = {
-    "ndvi": """
-        //VERSION=3
-        function setup() {
-            return { input: ["B04", "B08", "SCL"], output: { bands: 1, sampleType: "FLOAT32" }};
-        }
-        function evaluatePixel(sample) {
-            if ([8, 9, 10].includes(sample.SCL)) { return [NaN]; } // Cloud mask
-            if (sample.B08 + sample.B04 === 0) { return [NaN]; }
-            return [(sample.B08 - sample.B04) / (sample.B08 + sample.B04)];
-        }
-    """,
-    "ndwi": """
-        //VERSION=3
-        function setup() {
-            return { input: ["B03", "B08", "SCL"], output: { bands: 1, sampleType: "FLOAT32" }};
-        }
-        function evaluatePixel(sample) {
-            if ([8, 9, 10].includes(sample.SCL)) { return [NaN]; } // Cloud mask
-            if (sample.B08 + sample.B03 === 0) { return [NaN]; }
-            return [(sample.B03 - sample.B08) / (sample.B03 + sample.B08)];
-        }
-    """
-}
-
-def encode_image(image_array):
-    nan_mask = np.isnan(image_array)
-    image_array[nan_mask] = -1 # Represent no-data areas as black
-    img_scaled = (np.clip(image_array, -1, 1) * 127.5 + 127.5).astype(np.uint8)
-    img = Image.fromarray(img_scaled, 'L')
-    buffered = BytesIO()
-    img.save(buffered, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buffered.getvalue()).decode()
-
-def get_analysis(bbox_coords: list, from_date: str, to_date: str, analysis_type: str = "ndvi"):
+# Load SentinelHub configuration
+def get_sh_config():
     config = SHConfig()
-    config.sh_client_id = os.environ.get('SH_CLIENT_ID')
-    config.sh_client_secret = os.environ.get('SH_CLIENT_SECRET')
+    config.sh_client_id = os.environ.get("SH_CLIENT_ID")
+    config.sh_client_secret = os.environ.get("SH_CLIENT_SECRET")
+
+    if not config.sh_client_id or not config.sh_client_secret:
+        raise RuntimeError("Missing SentinelHub credentials in environment variables")
+    
+    return config
+
+# Get evalscript for analysis type
+def get_evalscript(analysis_type: str) -> str:
+    if analysis_type.lower() == "ndvi":
+        return """
+        // NDVI = (B08 - B04) / (B08 + B04)
+        // Band 8 = NIR, Band 4 = Red
+        return [ (B08 - B04) / (B08 + B04) ]
+        """
+    elif analysis_type.lower() == "ndwi":
+        return """
+        // NDWI = (B03 - B08) / (B03 + B08)
+        // Band 3 = Green, Band 8 = NIR
+        return [ (B03 - B08) / (B03 + B08) ]
+        """
+    else:
+        raise ValueError("Unsupported analysis type. Use 'ndvi' or 'ndwi'.")
+
+# Main analysis function
+def get_analysis(bbox_coords: list, from_date: str, to_date: str, analysis_type: str):
+    config = get_sh_config()
+
+    # Define bounding box and size
     bbox = BBox(bbox=bbox_coords, crs=CRS.WGS84)
+    resolution = 10  # meters
+    size = bbox_to_dimensions(bbox, resolution=resolution)
 
-    evalscript = EVALSCRIPTS.get(analysis_type)
-    if not evalscript:
-        raise ValueError("Invalid analysis type specified.")
+    # Get evalscript
+    evalscript = get_evalscript(analysis_type)
 
-    request_from = SentinelHubRequest(
+    # Build request
+    request = SentinelHubRequest(
         evalscript=evalscript,
-        input_data=[SentinelHubRequest.input_data(data_collection=DataCollection.SENTINEL2_L1C, time_interval=(from_date, from_date))],
-        responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
-        bbox=bbox, size=(512, 512), config=config
+        input_data=[
+            SentinelHubRequest.input_data(
+                data_collection=DataCollection.SENTINEL2_L2A,
+                time_interval=(from_date, to_date),
+                mosaicking_order='mostRecent'
+            )
+        ],
+        responses=[SentinelHubRequest.output_response('default', MimeType.TIFF)],
+        bbox=bbox,
+        size=size,
+        config=config
     )
-    request_to = SentinelHubRequest(
-        evalscript=evalscript,
-        input_data=[SentinelHubRequest.input_data(data_collection=DataCollection.SENTINEL2_L1C, time_interval=(to_date, to_date))],
-        responses=[SentinelHubRequest.output_response("default", MimeType.TIFF)],
-        bbox=bbox, size=(512, 512), config=config
-    )
 
-    image_from = request_from.get_data()[0]
-    image_to = request_to.get_data()[0]
+    try:
+        response = request.get_data()
+        if not response or len(response[0].shape) == 0:
+            raise NoDataAvailableException("No valid satellite data available for the specified region and time.")
+        
+        image_data = response[0].squeeze()
+        mean_value = float(np.nanmean(image_data))
+        
+        return {
+            "analysis_type": analysis_type,
+            "bbox": bbox_coords,
+            "from_date": from_date,
+            "to_date": to_date,
+            "mean_index_value": round(mean_value, 4)
+        }
 
-    mean_from = np.nanmean(image_from)
-    mean_to = np.nanmean(image_to)
-
-    if np.isnan(mean_from) or np.isnan(mean_to):
-        raise NoDataAvailableException("No satellite data found for one or both dates, likely due to cloud cover.")
-
-    change = 0.0
-    if abs(mean_from) > 1e-6:
-        change = ((mean_to - mean_from) / abs(mean_from)) * 100
-
-    result = {
-        "from_date_str": from_date,
-        "to_date_str": to_date,
-        f"mean_{analysis_type}_from": round(float(mean_from), 4),
-        f"mean_{analysis_type}_to": round(float(mean_to), 4),
-        "change_percentage": round(float(change), 2),
-        "image_from": encode_image(np.copy(image_from)),
-        "image_to": encode_image(np.copy(image_to)),
-        "analysis_type": analysis_type.upper()
-    }
-    return result
+    except SentinelHubDownloadFailedException as e:
+        raise NoDataAvailableException("Failed to download satellite data from SentinelHub.") from e
+    except Exception as e:
+        raise RuntimeError(f"Unexpected error during geospatial analysis: {e}")
