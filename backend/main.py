@@ -1,99 +1,48 @@
 # backend/main.py
-import os
+
 import uuid
 from datetime import date
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
-# Make sure geospatial.py is in the same directory
-from geospatial import get_ndvi_change
+# Import the Celery app and the results database from the worker
+from celery_worker import run_analysis_task, tasks_db
 
-# --- App Initialization ---
-app = FastAPI(
-    title="Geospatial AI Monitor API",
-    description="An API to analyze vegetation change using Sentinel Hub data.",
-    version="1.0.0"
-)
-
-# --- CORS Middleware ---
-# This allows your React frontend to communicate with this backend.
-# In a real production environment, you should restrict this to your frontend's domain.
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
-# --- Pydantic Models ---
-# Defines the structure of the incoming API request body.
 class AnalysisRequest(BaseModel):
-    bbox: list[float]  # Bounding box: [min_lon, min_lat, max_lon, max_lat]
+    bbox: list[float]
     from_date: date
     to_date: date
+    analysis_type: str # Add this new field
 
-# --- In-memory "database" for tracking task status ---
-# A simple dictionary to store the state of each analysis task.
-# For a production app, this would be replaced by a more robust solution like Redis or a database table.
-tasks = {}
-
-# --- Background Task Function ---
-def run_analysis_and_store_results(task_id: str, bbox: list[float], from_date: str, to_date: str):
-    """
-    A wrapper function that runs the heavy geospatial analysis in the background.
-    It updates the shared 'tasks' dictionary with the result or error.
-    """
-    print(f"Starting analysis for task: {task_id}")
-    try:
-        # Call the core function that communicates with Sentinel Hub
-        result_data = get_ndvi_change(bbox, from_date, to_date)
-        tasks[task_id] = {"status": "completed", "result": result_data}
-        print(f"Task {task_id} completed successfully.")
-    except Exception as e:
-        # If anything goes wrong, store the error message
-        print(f"Task {task_id} failed: {e}")
-        tasks[task_id] = {"status": "failed", "error": str(e)}
-
-
-# --- API Endpoints ---
 @app.post("/analyze", status_code=202)
-async def analyze_area(request: AnalysisRequest, background_tasks: BackgroundTasks):
-    """
-    Accepts an analysis request, assigns it a unique task ID, and starts
-    the processing in the background. Returns the task ID immediately.
-    """
+async def analyze_area(request: AnalysisRequest):
     task_id = str(uuid.uuid4())
-    tasks[task_id] = {"status": "processing"}
-
-    # Add the heavy lifting to FastAPI's background task queue
-    background_tasks.add_task(
-        run_analysis_and_store_results,
-        task_id,
-        request.bbox,
-        request.from_date.isoformat(),
-        request.to_date.isoformat()
+    # Send the task to the Celery worker
+    run_analysis_task.delay(
+        task_id, request.bbox, request.from_date.isoformat(), 
+        request.to_date.isoformat(), request.analysis_type
     )
-
     return {"task_id": task_id, "status": "processing"}
-
 
 @app.get("/results/{task_id}")
 async def get_results(task_id: str):
-    """
-    Allows the frontend to poll for the result of a task using its ID.
-    Returns the status and, if completed, the final analysis data.
-    """
-    task = tasks.get(task_id)
+    # Retrieve result from the shared dictionary managed by the worker
+    task = tasks_db.get(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        # Check Celery's backend if not in our dict (more robust)
+        task_result = run_analysis_task.AsyncResult(task_id)
+        if task_result.state == 'PENDING':
+             raise HTTPException(status_code=404, detail="Task not found")
+        # You can build more complex logic here if needed
+        return {"status": task_result.state}
+        
     return task
 
-
-@app.get("/")
-async def root():
-    """
-    A simple root endpoint to confirm the API is running.
-    """
-    return {"message": "Geospatial AI Monitor API is running."}
+# ... rest of your main.py ...
