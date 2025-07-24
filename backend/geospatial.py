@@ -1,4 +1,5 @@
 # backend/geospatial.py
+import os 
 import numpy as np
 from sentinelhub import (
     SentinelHubRequest,
