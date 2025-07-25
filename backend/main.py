@@ -11,16 +11,23 @@ from typing import List, Optional
 import redis.asyncio as redis
 import datetime
 import base64
+import asyncio # For running synchronous code in async context
+
+# Import sentinelhub-py components
+from sentinelhub import SHConfig, BBox, CRS, MimeType, SentinelHubRequest, DataCollection, bbox_to_dimensions
+from PIL import Image # For image processing (converting to JPEG bytes)
+from io import BytesIO # For handling image bytes in memory
 
 # Load environment variables from .env file
 load_dotenv()
 
 # --- DEBUGGING PRINTS FOR ENV VARIABLES ---
+# These prints will show you if your .env variables are being read correctly on startup
 print("\n--- Environment Variable Check ---")
 print(f"GOOGLE_API_KEY: {'SET' if os.getenv('GOOGLE_API_KEY') else 'NOT SET'}")
-print(f"SENTINEL_HUB_OAUTH_CLIENT_ID: {'SET' if os.getenv('SENTINEL_HUB_OAUTH_CLIENT_ID') else 'NOT SET'}")
-print(f"SENTINEL_HUB_OAUTH_CLIENT_SECRET: {'SET' if os.getenv('SENTINEL_HUB_OAUTH_CLIENT_SECRET') else 'NOT SET'}")
-print(f"SENTINEL_HUB_CONFIG_ID: {'SET' if os.getenv('SENTINEL_HUB_CONFIG_ID') else 'NOT SET'}") # Still used for WMS if needed, but not directly in Process API
+print(f"SH_CLIENT_ID: {'SET' if os.getenv('SH_CLIENT_ID') else 'NOT SET'}")
+print(f"SH_CLIENT_SECRET: {'SET' if os.getenv('SH_CLIENT_SECRET') else 'NOT SET'}")
+print(f"INSTANCE_ID: {'SET' if os.getenv('INSTANCE_ID') else 'NOT SET'}")
 print(f"REDIS_URL: {'SET' if os.getenv('REDIS_URL') else 'NOT SET'}")
 print("--- End Environment Variable Check ---\n")
 # --- END DEBUGGING PRINTS ---
@@ -49,18 +56,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Environment Variables ---
+# --- Environment Variables (read again for direct use) ---
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-
-SENTINEL_HUB_OAUTH_CLIENT_ID = os.getenv("SENTINEL_HUB_OAUTH_CLIENT_ID")
-SENTINEL_HUB_OAUTH_CLIENT_SECRET = os.getenv("SENTINEL_HUB_OAUTH_CLIENT_SECRET")
-SENTINEL_HUB_CONFIG_ID = os.getenv("SENTINEL_HUB_CONFIG_ID") # Kept for consistency and potential future use
+SH_CLIENT_ID = os.getenv("SH_CLIENT_ID")
+SH_CLIENT_SECRET = os.getenv("SH_CLIENT_SECRET")
+INSTANCE_ID = os.getenv("INSTANCE_ID") # Sentinel Hub Configuration ID
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-# Sentinel Hub OAuth token and expiration
-SENTINEL_HUB_TOKEN = None
-TOKEN_EXPIRY = None
+# --- Sentinel Hub Configuration (for sentinelhub-py) ---
+sh_config = SHConfig()
+sh_config.sh_client_id = SH_CLIENT_ID
+sh_config.sh_client_secret = SH_CLIENT_SECRET
+sh_config.instance_id = INSTANCE_ID # Set the instance ID here (used by some sentinelhub-py functions)
 
 # Redis client initialization (will connect on startup)
 redis_client: Optional[redis.Redis] = None
@@ -101,149 +109,116 @@ class GeoAnalysisResponse(BaseModel):
     image_url_2: Optional[str] = None
     cached: bool = False
 
-# --- Sentinel Hub Authentication ---
-async def get_sentinel_hub_token():
-    global SENTINEL_HUB_TOKEN, TOKEN_EXPIRY
-    if SENTINEL_HUB_TOKEN and TOKEN_EXPIRY and TOKEN_EXPIRY > datetime.datetime.now() + datetime.timedelta(minutes=5):
-        return SENTINEL_HUB_TOKEN
+# --- Sentinel Hub Image Fetching (Using sentinelhub-py Process API) ---
+async def get_sentinel_image_data(bbox: BoundingBox, date: str) -> tuple[str, str]:
+    # Validate sentinelhub-py config
+    if not sh_config.sh_client_id or not sh_config.sh_client_secret:
+        raise HTTPException(status_code=500, detail="Sentinel Hub OAuth Client ID/Secret not configured in backend.")
 
-    if not SENTINEL_HUB_OAUTH_CLIENT_ID or not SENTINEL_HUB_OAUTH_CLIENT_SECRET:
-        raise HTTPException(status_code=500, detail="Sentinel Hub OAuth Client ID or Secret not configured.")
-
-    token_url = "https://services.sentinel-hub.com/oauth/token"
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    data = {
-        "grant_type": "client_credentials",
-        "client_id": SENTINEL_HUB_OAUTH_CLIENT_ID,
-        "client_secret": SENTINEL_HUB_OAUTH_CLIENT_SECRET
-    }
-
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(token_url, headers=headers, data=data, timeout=10.0)
-            response.raise_for_status()
-            token_data = response.json()
-            SENTINEL_HUB_TOKEN = token_data["access_token"]
-            TOKEN_EXPIRY = datetime.datetime.now() + datetime.timedelta(seconds=token_data["expires_in"] - 60)
-            return SENTINEL_HUB_TOKEN
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Network error fetching Sentinel Hub token: {exc}")
-    except httpx.HTTPStatusError as exc:
-        print(f"Sentinel Hub Token Error: {exc.response.text}")
-        raise HTTPException(status_code=exc.response.status_code, detail=f"Sentinel Hub authentication error: {exc.response.text}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error fetching Sentinel Hub token: {e}")
-
-# --- Sentinel Hub Image Fetching (Using Process API) ---
-async def get_sentinel_image_data(bbox: BoundingBox, date: str, token: str) -> tuple[str, str]:
-    process_url = "https://services.sentinel-hub.com/api/v1/process"
+    # Convert Pydantic BBox to sentinelhub.BBox
+    sh_bbox = BBox(bbox=[bbox.west, bbox.south, bbox.east, bbox.north], crs=CRS.WGS84)
     
-    # Evalscript for True Color (B04, B03, B02) with improved scaling and clamping
-    # Increased factor for brighter images, added more robust clamping
+    # Define image resolution (10m for Sentinel-2)
+    resolution_meters = 10
+    size = bbox_to_dimensions(sh_bbox, resolution=resolution_meters)
+
+    # Evalscript for True Color (B04, B03, B02) with basic scaling for visual output
+    # This evalscript is from the user's working code, adapted for general use.
     evalscript = """
         //VERSION=3
         function setup() {
             return {
                 input: ["B04", "B03", "B02"],
-                output: { bands: 3, sampleType: "UINT8" } // Output as 8-bit unsigned integer
+                output: { bands: 3, sampleType: "UINT8" } // Output as 8-bit unsigned integer for JPEG
             };
         }
 
         function evaluatePixel(sample) {
-            // Factor for brightness adjustment. Try values from 2.5 to 3.5 or even higher.
-            const factor = 3.0; // Increased from 2.5 for potentially brighter images
-
-            // Clamp values between 0 and 1 before final scaling to prevent over/underflow
-            let red = Math.min(Math.max(sample.B04 / 10000 * factor, 0), 1);
-            let green = Math.min(Math.max(sample.B03 / 10000 * factor, 0), 1);
-            let blue = Math.min(Math.max(sample.B02 / 10000 * factor, 0), 1);
-
+            // Apply a simple scaling for visual brightness. Adjust 'factor' as needed (e.g., 2.5, 3.0, 3.5).
+            const factor = 2.5; 
             return [
-                red * 255,
-                green * 255,
-                blue * 255
+                sample.B04 * factor,
+                sample.B03 * factor,
+                sample.B02 * factor
             ];
         }
     """
 
-    # Calculate a wider time range (e.g., +/- 6 months around the target date)
+    # Calculate a time range for the request (e.g., entire year of the target date)
     # This significantly increases the chance of finding a cloud-free image.
     try:
-        target_date_obj = datetime.datetime.strptime(date, "%Y-%m-%d").date()
-        # Search for images within the entire year of the target date
-        time_range_from = f"{target_date_obj.year}-01-01T00:00:00Z"
-        time_range_to = f"{target_date_obj.year}-12-31T23:59:59Z"
+        target_year = datetime.datetime.strptime(date, "%Y-%m-%d").year
+        time_interval_from = f"{target_year}-01-01T00:00:00Z"
+        time_interval_to = f"{target_year}-12-31T23:59:59Z"
     except ValueError:
         # Fallback if date parsing fails, use a very wide default range
-        time_range_from = "2015-01-01T00:00:00Z" # Start of Sentinel-2 data
-        time_range_to = datetime.date.today().isoformat() + "T23:59:59Z" # Today
+        time_interval_from = "2015-01-01T00:00:00Z" # Start of Sentinel-2 data
+        time_interval_to = datetime.date.today().isoformat() + "T23:59:59Z" # Today
         print(f"Warning: Date parsing failed for {date}. Using very wide default range.")
 
 
-    # Define the payload for the Process API request
-    payload = {
-        "input": {
-            "bounds": {
-                "bbox": [bbox.west, bbox.south, bbox.east, bbox.north],
-                "properties": {
-                    "crs": "http://www.opengis.net/def/crs/EPSG/0/4326"
-                }
-            },
-            "data": [{
-                "type": "sentinel-2-l2a", # Sentinel-2 Level 2A data
-                "dataFilter": {
-                    "timeRange": {
-                        "from": time_range_from,
-                        "to": time_range_to
-                    },
-                    "mosaickingOrder": "leastCC", # Get the least cloudy image within the time range
-                    "maxcc": 30 # Max Cloud Coverage: Increased to 30% to allow more data, adjust as needed (e.g., 50, 80)
-                }
-            }]
-        },
-        "output": {
-            "width": 512,
-            "height": 512,
-            "responses": [{
-                "identifier": "default",
-                "format": {"type": "image/jpeg"}
-            }]
-        },
-        "evalscript": evalscript
-    }
-
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+    request = SentinelHubRequest(
+        data_folder=".", # Data will be processed in memory, not saved to disk by default
+        evalscript=evalscript,
+        input_data=[
+            SentinelHubRequest.input_data(
+                data_collection=DataCollection.SENTINEL2_L1C, # Changed from L2A to L1C
+                time_interval=(time_interval_from, time_interval_to),
+                mosaicking_order="leastCC", # Get the least cloudy image within the time range
+                maxcc=0.30 # Max Cloud Coverage: Changed to 0.30 (30%) as a float between 0 and 1
+            )
+        ],
+        responses=[
+            SentinelHubRequest.output_response("default", MimeType.JPG) # CRITICAL FIX: Changed from MimeType.JPEG to MimeType.JPG
+        ],
+        bbox=sh_bbox,
+        size=size,
+        config=sh_config # Pass the global SHConfig object
+    )
 
     # --- DEBUGGING PRINT FOR SENTINEL HUB PROCESS API REQUEST ---
-    print(f"\n--- Sentinel Hub Process API Request ---")
-    print(f"URL: {process_url}")
-    print(f"Headers: {headers}")
-    print(f"Payload: {json.dumps(payload, indent=2)}")
+    print(f"\n--- Sentinel Hub Process API Request (via sentinelhub-py) ---")
+    print(f"Data Collection: {DataCollection.SENTINEL2_L1C.name}") # Reflects the change
+    print(f"Time Interval: {time_interval_from} to {time_interval_to}")
+    print(f"BBOX: {str(sh_bbox)}") # FIX: Changed sh_bbox.wgs84_str() to str(sh_bbox)
+    print(f"Evalscript (snippet): {evalscript[:200]}...")
     print(f"--- End Sentinel Hub Process API Request ---\n")
     # --- END DEBUGGING PRINT ---
 
     try:
-        async with httpx.AsyncClient() as client:
-            image_response = await client.post(process_url, headers=headers, json=payload, timeout=60.0) # Increased timeout
-            image_response.raise_for_status()
+        # Run the synchronous get_data() call in a separate thread
+        image_data_list = await asyncio.to_thread(request.get_data)
+        
+        if not image_data_list or len(image_data_list) == 0:
+            raise HTTPException(status_code=400, detail=f"No cloud-free Sentinel-2 L1C data available for the selected area and time range (maxcc={payload['input']['data'][0]['dataFilter']['maxcc']}%). Try a different date or a larger maxcc.")
 
-            base64_encoded_image = base64.b64encode(image_response.content).decode('utf-8')
-            display_url = f"data:image/jpeg;base64,{base64_encoded_image}"
-            print(f"Successfully fetched image for {date} via Process API. Size: {len(base64_encoded_image)} bytes (Base64).")
-            return base64_encoded_image, display_url
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Network error fetching Sentinel Hub image from Process API: {exc}")
-    except httpx.HTTPStatusError as exc:
-        print(f"Sentinel Hub Process API Error (HTTP {exc.response.status_code}): {exc.response.text}")
-        # If the error is 400 and indicates no data, provide a more specific message
-        if exc.response.status_code == 400 and "No data available" in exc.response.text:
-             raise HTTPException(status_code=400, detail=f"No cloud-free Sentinel-2 L2A data available for the selected area and time range (maxcc={payload['input']['data'][0]['dataFilter']['maxcc']}%). Try a different date or a larger maxcc.")
-        raise HTTPException(status_code=exc.response.status_code, detail=f"Sentinel Hub Process API error: {exc.response.text}")
+        # The result is a NumPy array, convert to PIL Image then to bytes
+        image_array = image_data_list[0] # Assuming one image response
+        
+        # Ensure image_array is 3D (height, width, channels)
+        if image_array.ndim == 2: # Grayscale image
+            image_array = Image.fromarray(image_array, mode='L')
+        elif image_array.ndim == 3 and image_array.shape[2] == 3: # RGB image
+             image_array = Image.fromarray(image_array, mode='RGB')
+        else:
+            raise ValueError("Unexpected image array dimensions from Sentinel Hub.")
+
+        # Convert PIL Image to JPEG bytes in memory
+        byte_io = BytesIO()
+        image_array.save(byte_io, format='JPEG') # Save as JPEG format
+        image_bytes = byte_io.getvalue()
+
+        base64_encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+        # For frontend display, we generate a data URL (base64 encoded image directly in URL)
+        display_url = f"data:image/jpeg;base64,{base64_encoded_image}"
+        
+        print(f"Successfully fetched image via sentinelhub-py. Size: {len(base64_encoded_image)} bytes (Base64).")
+        return base64_encoded_image, display_url
+    except HTTPException: # Re-raise our own HTTPExceptions
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Unexpected error fetching Sentinel Hub image: {e}")
+        print(f"Error fetching image with sentinelhub-py: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch satellite image via Sentinel Hub Process API: {e}")
 
 
 # --- Main AI Analysis Endpoint ---
@@ -251,8 +226,10 @@ async def get_sentinel_image_data(bbox: BoundingBox, date: str, token: str) -> t
 async def generate_ai_response(request: GeoAnalysisRequest):
     if not GOOGLE_API_KEY:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Google API Key not configured.")
-    if not SENTINEL_HUB_OAUTH_CLIENT_ID or not SENTINEL_HUB_OAUTH_CLIENT_SECRET: # CONFIG_ID not directly needed for Process API auth
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Sentinel Hub OAuth Client ID/Secret not fully configured.")
+    # Check sentinelhub-py config directly now
+    if not sh_config.sh_client_id or not sh_config.sh_client_secret:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Sentinel Hub OAuth Client ID/Secret not fully configured in backend.")
+
 
     gemini_fixed_prompt = (
         "Analyze the provided satellite image(s) of this geographical area. "
@@ -282,15 +259,15 @@ async def generate_ai_response(request: GeoAnalysisRequest):
     base64_image_1 = None
     base64_image_2 = None
     original_image_url_1 = None
-    original_image_url_2 = None
+    original_image_url_2 = None # FIX: Ensure original_image_url_2 is initialized
 
     try:
-        sh_token = await get_sentinel_hub_token()
+        # No need for get_sentinel_hub_token() explicitly here, sentinelhub-py handles it
         
-        base64_image_1, original_image_url_1 = await get_sentinel_image_data(request.bbox, request.start_date, sh_token)
+        base64_image_1, original_image_url_1 = await get_sentinel_image_data(request.bbox, request.start_date)
 
         if request.start_date != request.end_date:
-            base64_image_2, original_image_url_2 = await get_sentinel_image_data(request.bbox, request.end_date, sh_token)
+            base64_image_2, original_image_url_2 = await get_sentinel_image_data(request.bbox, request.end_date)
 
     except HTTPException as e:
         print(f"Sentinel Hub image fetching failed ({e.detail}).")
