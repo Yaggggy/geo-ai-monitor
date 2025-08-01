@@ -1,10 +1,9 @@
-# backend/test_gemini_vision.py
+
 import os
 import httpx
 import json
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
 async def test_gemini_vision_api():
@@ -17,8 +16,6 @@ async def test_gemini_vision_api():
     print(f"Using API Key: {GOOGLE_API_KEY[:5]}...{GOOGLE_API_KEY[-5:]}") # Print partial key for security
     gemini_api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent?key={GOOGLE_API_KEY}"
 
-    # Use a publicly accessible image URL for testing
-    # This is a placeholder image. You can replace it with any other publicly accessible image URL.
     test_image_url = "https://placehold.co/600x400/FF0000/FFFFFF?text=Test+Image"
 
     payload = {
@@ -44,9 +41,9 @@ async def test_gemini_vision_api():
                 gemini_api_url,
                 headers={"Content-Type": "application/json"},
                 json=payload,
-                timeout=60.0 # Increased timeout
+                timeout=60.0 
             )
-            response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+            response.raise_for_status() 
 
             result = response.json()
             print("\n--- Gemini API Response ---")

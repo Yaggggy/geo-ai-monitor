@@ -14,8 +14,8 @@ if not client_id or not client_secret:
     exit()
 
 print("🔍 Environment Check:")
-print(f"  CLIENT_ID: ✅")
-print(f"  CLIENT_SECRET: ✅\n")
+print(f"  CLIENT_ID:")
+print(f"  CLIENT_SECRET:\n")
 
 # Get token
 print("🔑 Getting OAuth token for Sentinel Hub...")
@@ -29,10 +29,10 @@ res = requests.post(token_url, data=data)
 access_token = res.json().get("access_token")
 
 if not access_token:
-    print("❌ Failed to retrieve token.")
+    print("Failed to retrieve token.")
     exit()
 
-print("✅ Token acquired.\n")
+print("Token acquired.\n")
 
 # Request image
 print("🌍 Fetching Sentinel image for 2024-07-10")
@@ -52,7 +52,7 @@ payload = {
             }
         },
         "data": [{
-            "type": "sentinel-2-l2a",  # Using L2A (surface reflectance)
+            "type": "sentinel-2-l2a", 
             "dataFilter": {
                 "timeRange": {
                     "from": "2024-07-10T00:00:00Z",
@@ -94,8 +94,8 @@ response = requests.post(url, headers=headers, json=payload)
 if response.status_code == 200:
     with open("berlin_image.jpg", "wb") as f:
         f.write(response.content)
-    print("✅ Image fetched and saved as 'berlin_image.jpg'")
+    print("Image fetched and saved as 'berlin_image.jpg'")
 else:
-    print(f"❌ Error: {response.status_code} - {response.text}")
+    print(f"Error: {response.status_code} - {response.text}")
 
-print("\n✅ Sentinel Hub Test Complete ✅")
+print("\nSentinel Hub Test Complete ✅")

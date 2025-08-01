@@ -1,9 +1,5 @@
-/* frontend/src/App.css */
-
-/* Import Google Font - Inter */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
 
-/* Basic Reset & Font */
 body {
   margin: 0;
   font-family: "Inter", sans-serif;
@@ -13,28 +9,26 @@ body {
     to bottom right,
     #e0f2fe,
     #ede9fe
-  ); /* Light blue to light purple gradient */
+  );
   min-height: 100vh;
   display: flex;
   justify-content: center;
-  align-items: flex-start; /* Align items to the start to prevent excessive vertical centering */
+  align-items: flex-start;
   padding: 20px;
   box-sizing: border-box;
-  color: #333; /* Default text color */
+  color: #333;
 }
 
-/* Main App Container */
 .app-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 960px; /* Max width for content */
+  max-width: 960px;
   padding: 20px;
   box-sizing: border-box;
 }
 
-/* Application Title */
 .app-title {
   font-size: 2.5rem;
   font-weight: 800;
@@ -44,7 +38,6 @@ body {
   text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Map Section Wrapper */
 .map-section-wrapper {
   width: 100%;
   max-width: 960px;
@@ -57,25 +50,16 @@ body {
   border: 1px solid #e5e7eb;
 }
 
-/* Map Container */
 .map-container {
   height: 384px;
   width: 100%;
-  position: relative; /* Needed for Leaflet Draw controls positioning */
+  position: relative;
 }
 
-/* Leaflet Map Styling */
 .leaflet-map {
   height: 100%;
   width: 100%;
   border-radius: 12px;
-}
-
-/* Leaflet Draw Control Customization */
-.leaflet-draw-toolbar {
-  /* Adjust position if needed, default is top-left */
-  /* top: 10px !important;
-    left: 10px !important; */
 }
 
 .leaflet-draw-toolbar a {
@@ -92,7 +76,7 @@ body {
 }
 
 .leaflet-draw-actions a {
-  color: #333 !important; /* Text color for action buttons (e.g., "Cancel", "Save") */
+  color: #333 !important;
 }
 
 .leaflet-draw-actions a:hover {
@@ -108,7 +92,6 @@ body {
   white-space: nowrap;
 }
 
-/* Controls and AI Response Section */
 .controls-section {
   width: 100%;
   max-width: 960px;
@@ -120,7 +103,6 @@ body {
   border: 1px solid #e5e7eb;
 }
 
-/* Section Titles */
 .section-title {
   font-size: 1.25rem;
   font-weight: 600;
@@ -128,7 +110,6 @@ body {
   margin-bottom: 8px;
 }
 
-/* Location Display (AOI) */
 .location-display {
   margin-bottom: 16px;
 }
@@ -150,7 +131,6 @@ body {
   margin-top: 4px;
 }
 
-/* Date Selection Section */
 .date-selection-section {
   margin-bottom: 16px;
   padding-top: 10px;

@@ -1,5 +1,3 @@
-// frontend/src/App.js
-
 import React, { useState, useEffect, useRef } from "react";
 import {
   MapContainer,
@@ -11,10 +9,9 @@ import {
 } from "react-leaflet";
 import { EditControl } from "react-leaflet-draw";
 import "leaflet/dist/leaflet.css";
-import "leaflet-draw/dist/leaflet.draw.css"; // Import Leaflet Draw CSS
-import "./App.css"; // Our custom CSS
+import "leaflet-draw/dist/leaflet.draw.css";
+import "./App.css";
 
-// Fix for default marker icon issues with Webpack/React
 import L from "leaflet";
 function LeafletIconFix() {
   useEffect(() => {
@@ -32,31 +29,28 @@ function LeafletIconFix() {
   return null;
 }
 
-// Helper to get current year
+
 const getCurrentYear = () => new Date().getFullYear();
-// Helper to get a default past year (e.g., 5 years ago)
+
 const getDefaultPastYear = () => getCurrentYear() - 5;
 
 function App() {
-  const [mapCenter, setMapCenter] = useState([28.6139, 77.209]); // Default to Delhi, India
-  const [drawnBounds, setDrawnBounds] = useState(null); // Stores the drawn rectangle's bounds
-  // promptText, manualImageUrl1, manualImageUrl2 states removed
-  const [startYear, setStartYear] = useState(getDefaultPastYear()); // Default to 5 years ago
-  const [endYear, setEndYear] = useState(getCurrentYear()); // Default to current year
+  const [mapCenter, setMapCenter] = useState([28.6139, 77.209]);
+ 
+  const [startYear, setStartYear] = useState(getDefaultPastYear());
+  const [endYear, setEndYear] = useState(getCurrentYear()); 
   const [llmResponse, setLlmResponse] = useState("");
-  const [fetchedImageUrl1, setFetchedImageUrl1] = useState(""); // To display fetched images
-  const [fetchedImageUrl2, setFetchedImageUrl2] = useState(""); // To display fetched images
+  const [fetchedImageUrl1, setFetchedImageUrl1] = useState(""); 
+  const [fetchedImageUrl2, setFetchedImageUrl2] = useState(""); 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [isCached, setIsCached] = useState(false); // To indicate if response was cached
+  const [isCached, setIsCached] = useState(false); 
 
   const BACKEND_URL =
     process.env.REACT_APP_BACKEND_URL || "http://127.0.0.1:8000";
 
-  const featureGroupRef = useRef(); // Ref to access the FeatureGroup for clearing layers
-
-  // Event handler for when a new shape is drawn
-  const onCreated = (e) => {
+  const featureGroupRef = useRef(); 
+ 
     const { layerType, layer } = e;
     if (layerType === "rectangle") {
       const bounds = layer.getBounds();
@@ -66,20 +60,20 @@ function App() {
         east: bounds.getEast(),
         west: bounds.getWest(),
       });
-      // Clear previous layers to ensure only one rectangle exists
+ 
       if (featureGroupRef.current) {
         featureGroupRef.current.clearLayers();
-        featureGroupRef.current.addLayer(layer); // Add the new layer back
+        featureGroupRef.current.addLayer(layer); 
       }
     }
-    setLlmResponse(""); // Clear previous AI response on new drawing
+    setLlmResponse(""); 
     setError(null);
     setIsCached(false);
     setFetchedImageUrl1("");
     setFetchedImageUrl2("");
   };
 
-  // Event handler for when a shape is edited
+ 
   const onEdited = (e) => {
     e.layers.eachLayer((layer) => {
       if (layer instanceof L.Rectangle) {
@@ -99,7 +93,6 @@ function App() {
     setFetchedImageUrl2("");
   };
 
-  // Event handler for when a shape is deleted
   const onDeleted = () => {
     setDrawnBounds(null);
     setLlmResponse("");
@@ -129,8 +122,6 @@ function App() {
     }
 
     try {
-      // Construct full date strings for backend (YYYY-MM-DD)
-      // Defaulting to January 1st for simplicity as per requirement
       const startDateFull = `${startYear}-01-01`;
       const endDateFull = `${endYear}-01-01`;
 
@@ -138,7 +129,7 @@ function App() {
         bbox: drawnBounds,
         start_date: startDateFull,
         end_date: endDateFull,
-        // prompt_text, manual_image_url_1, manual_image_url_2 removed from payload
+       
       };
 
       const response = await fetch(`${BACKEND_URL}/generate-ai-response/`, {
@@ -196,7 +187,7 @@ function App() {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            {/* FeatureGroup to hold and manage drawn layers */}
+            {}
             <FeatureGroup ref={featureGroupRef}>
               <EditControl
                 position="topleft"
@@ -239,7 +230,7 @@ function App() {
           )}
         </div>
 
-        {/* Date Selection Inputs - Now Year Only */}
+        {}
         <div className="date-selection-section">
           <h2 className="section-title">Select Years for Imagery:</h2>
           <p className="location-hint">
@@ -255,7 +246,7 @@ function App() {
               className="date-input"
               value={startYear}
               onChange={(e) => setStartYear(parseInt(e.target.value))}
-              min="2015" // Sentinel-2 data generally available from 2015
+              min="2015"
               max={getCurrentYear()}
             />
             <label htmlFor="end-year" className="date-label">
@@ -273,8 +264,8 @@ function App() {
           </div>
         </div>
 
-        {/* Prompt area removed */}
-        {/* Manual image URL inputs removed */}
+        {}
+        {}
 
         <button
           onClick={handleGenerateResponse}
