@@ -1,5 +1,4 @@
-# To Check the API is working by downloading a true color image of Paris using Sentinel Hub
-import os
+# To Check the API is working 
 from sentinelhub import SHConfig, BBox, CRS, MimeType, SentinelHubRequest, DataCollection, bbox_to_dimensions
 from dotenv import load_dotenv
 from PIL import Image
