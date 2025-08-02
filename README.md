@@ -4,7 +4,7 @@ A powerful web application that combines satellite imagery analysis with AI-powe
 
 ## 📸 Screenshots
 
-![alt text](image.png)
+![alt text](image-3.png)
 _Main interface showing the interactive map and controls_
 
 ![alt text](image-2.png)
