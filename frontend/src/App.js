@@ -29,7 +29,6 @@ function LeafletIconFix() {
   return null;
 }
 
-
 const getCurrentYear = () => new Date().getFullYear();
 
 const getDefaultPastYear = () => getCurrentYear() - 5;
@@ -38,18 +37,18 @@ function App() {
   const [mapCenter, setMapCenter] = useState([28.6139, 77.209]);
   const [drawnBounds, setDrawnBounds] = useState(null);
   const [startYear, setStartYear] = useState(getDefaultPastYear());
-  const [endYear, setEndYear] = useState(getCurrentYear()); 
+  const [endYear, setEndYear] = useState(getCurrentYear());
   const [llmResponse, setLlmResponse] = useState("");
-  const [fetchedImageUrl1, setFetchedImageUrl1] = useState(""); 
-  const [fetchedImageUrl2, setFetchedImageUrl2] = useState(""); 
+  const [fetchedImageUrl1, setFetchedImageUrl1] = useState("");
+  const [fetchedImageUrl2, setFetchedImageUrl2] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [isCached, setIsCached] = useState(false); 
+  const [isCached, setIsCached] = useState(false);
 
   const BACKEND_URL =
     process.env.REACT_APP_BACKEND_URL || "http://127.0.0.1:8000";
 
-  const featureGroupRef = useRef(); 
+  const featureGroupRef = useRef();
 
   const onCreated = (e) => {
     const { layerType, layer } = e;
@@ -61,20 +60,19 @@ function App() {
         east: bounds.getEast(),
         west: bounds.getWest(),
       });
- 
+
       if (featureGroupRef.current) {
         featureGroupRef.current.clearLayers();
-        featureGroupRef.current.addLayer(layer); 
+        featureGroupRef.current.addLayer(layer);
       }
     }
-    setLlmResponse(""); 
+    setLlmResponse("");
     setError(null);
     setIsCached(false);
     setFetchedImageUrl1("");
     setFetchedImageUrl2("");
   };
 
- 
   const onEdited = (e) => {
     e.layers.eachLayer((layer) => {
       if (layer instanceof L.Rectangle) {
@@ -130,7 +128,6 @@ function App() {
         bbox: drawnBounds,
         start_date: startDateFull,
         end_date: endDateFull,
-       
       };
 
       const response = await fetch(`${BACKEND_URL}/generate-ai-response/`, {
@@ -175,8 +172,17 @@ function App() {
       <LeafletIconFix />
 
       <h1 className="app-title">Geo AI Vision Explorer</h1>
-      
-      <div className="api-status-message" style={{color: 'red', fontWeight: 'bold', textAlign: 'center', fontSize: '18px', margin: '20px 0'}}>
+
+      <div
+        className="api-status-message"
+        style={{
+          color: "red",
+          fontWeight: "bold",
+          textAlign: "center",
+          fontSize: "18px",
+          margin: "20px 0",
+        }}
+      >
         <p>API is closed for now</p>
       </div>
 

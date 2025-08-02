@@ -37,7 +37,7 @@ body {
   border-radius: 0;
   box-shadow: none;
   overflow: hidden;
-  margin: 0 auto 20px auto;
+  margin-bottom: 20px;
   border: none;
   padding: 0;
 }
