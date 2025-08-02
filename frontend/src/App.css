@@ -169,7 +169,6 @@ body {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
 }
 
-/* Prompt Input Area */
 .prompt-area {
   margin-bottom: 16px;
 }
@@ -194,7 +193,6 @@ body {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
 }
 
-/* Generate Button */
 .generate-button {
   width: 100%;
   padding: 12px 24px;
@@ -228,7 +226,6 @@ body {
   opacity: 0.8;
 }
 
-/* Loading Spinner */
 .loading-spinner {
   display: flex;
   align-items: center;
@@ -262,7 +259,6 @@ body {
   opacity: 0.75;
 }
 
-/* Error Message */
 .error-message {
   margin-top: 16px;
   padding: 12px;
@@ -277,7 +273,6 @@ body {
   margin-bottom: 4px;
 }
 
-/* AI Response Display Area */
 .ai-response-section {
   margin-top: 24px;
 }
@@ -297,10 +292,9 @@ body {
   white-space: pre-wrap;
 }
 
-/* Fetched Images Preview */
 .fetched-images-preview {
   display: flex;
-  flex-wrap: wrap; /* Allow wrapping on smaller screens */
+  flex-wrap: wrap; 
   gap: 20px;
   margin-top: 15px;
   margin-bottom: 20px;
@@ -324,14 +318,12 @@ body {
 }
 
 .fetched-image {
-  max-width: 150px; /* Control size of preview images */
+  max-width: 150px; 
   height: auto;
   border-radius: 5px;
   border: 1px solid #ddd;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
-
-/* Responsive adjustments */
 @media (max-width: 768px) {
   .app-title {
     font-size: 2rem;
