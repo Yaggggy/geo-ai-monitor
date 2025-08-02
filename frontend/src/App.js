@@ -36,7 +36,7 @@ const getDefaultPastYear = () => getCurrentYear() - 5;
 
 function App() {
   const [mapCenter, setMapCenter] = useState([28.6139, 77.209]);
- 
+  const [drawnBounds, setDrawnBounds] = useState(null);
   const [startYear, setStartYear] = useState(getDefaultPastYear());
   const [endYear, setEndYear] = useState(getCurrentYear()); 
   const [llmResponse, setLlmResponse] = useState("");
@@ -50,7 +50,8 @@ function App() {
     process.env.REACT_APP_BACKEND_URL || "http://127.0.0.1:8000";
 
   const featureGroupRef = useRef(); 
- 
+
+  const onCreated = (e) => {
     const { layerType, layer } = e;
     if (layerType === "rectangle") {
       const bounds = layer.getBounds();
@@ -174,6 +175,10 @@ function App() {
       <LeafletIconFix />
 
       <h1 className="app-title">Geo AI Vision Explorer</h1>
+      
+      <div className="api-status-message" style={{color: 'red', fontWeight: 'bold', textAlign: 'center', fontSize: '18px', margin: '20px 0'}}>
+        <p>API is closed for now</p>
+      </div>
 
       <div className="map-section-wrapper">
         <div className="map-container">
@@ -187,7 +192,6 @@ function App() {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
-            {}
             <FeatureGroup ref={featureGroupRef}>
               <EditControl
                 position="topleft"
@@ -202,7 +206,7 @@ function App() {
                   circlemarker: false,
                   rectangle: {
                     shapeOptions: {
-                      color: "#2563eb", // Blue color for the rectangle
+                      color: "#2563eb",
                       fillOpacity: 0.1,
                       weight: 2,
                     },
@@ -230,7 +234,6 @@ function App() {
           )}
         </div>
 
-        {}
         <div className="date-selection-section">
           <h2 className="section-title">Select Years for Imagery:</h2>
           <p className="location-hint">
@@ -263,9 +266,6 @@ function App() {
             />
           </div>
         </div>
-
-        {}
-        {}
 
         <button
           onClick={handleGenerateResponse}
