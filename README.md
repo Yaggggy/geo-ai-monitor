@@ -4,15 +4,12 @@ A powerful web application that combines satellite imagery analysis with AI-powe
 
 ## 📸 Screenshots
 
-<!-- Add your screenshots here -->
-![Application Overview](screenshots/overview.png)
-*Main interface showing the interactive map and controls*
+![alt text](image.png)
+_Main interface showing the interactive map and controls_
 
+![alt text](image-2.png)
 ![Drawing Tools](screenshots/drawing-tools.png)
-*Drawing rectangle tool for area selection*
-
-![AI Analysis](screenshots/ai-analysis.png)
-*AI-generated analysis with satellite imagery comparison*
+_Drawing rectangle tool for area selection_
 
 ## ✨ Features
 
@@ -27,12 +24,14 @@ A powerful web application that combines satellite imagery analysis with AI-powe
 ## 🏗️ Architecture
 
 ### Frontend (React)
+
 - **Framework**: React 18.3.1
 - **Mapping**: Leaflet with React-Leaflet
 - **Drawing Tools**: Leaflet-Draw integration
 - **Styling**: Custom CSS with modern design patterns
 
 ### Backend (FastAPI)
+
 - **Framework**: FastAPI with async support
 - **AI Integration**: Google Gemini API for image analysis
 - **Satellite Data**: Sentinel Hub API for Earth observation data
@@ -53,29 +52,32 @@ A powerful web application that combines satellite imagery analysis with AI-powe
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/yourusername/geo-ai-monitor.git
    cd geo-ai-monitor
    ```
 
 2. **Backend Setup**
+
    ```bash
    cd backend
-   
+
    # Create virtual environment
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   
+
    # Install dependencies
    pip install -r requirements.txt
-   
+
    # Create environment file
    cp .env.example .env
    ```
 
 3. **Configure Environment Variables**
-   
+
    Create a `.env` file in the backend directory:
+
    ```env
    GOOGLE_API_KEY=your_gemini_api_key_here
    SH_CLIENT_ID=your_sentinel_hub_client_id
@@ -85,28 +87,32 @@ A powerful web application that combines satellite imagery analysis with AI-powe
    ```
 
 4. **Frontend Setup**
+
    ```bash
    cd ../frontend
-   
+
    # Install dependencies
    npm install
    ```
 
 5. **Start Services**
-   
+
    **Terminal 1 - Redis (if running locally):**
+
    ```bash
    redis-server
    ```
-   
+
    **Terminal 2 - Backend:**
+
    ```bash
    cd backend
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
-   
+
    **Terminal 3 - Frontend:**
+
    ```bash
    cd frontend
    npm start
@@ -122,11 +128,13 @@ A powerful web application that combines satellite imagery analysis with AI-powe
 ### API Keys Setup
 
 #### Google Gemini API
+
 1. Visit [Google AI Studio](https://aistudio.google.com/)
 2. Create a new API key
 3. Add to `.env` as `GOOGLE_API_KEY`
 
 #### Sentinel Hub
+
 1. Create account at [Sentinel Hub](https://www.sentinel-hub.com/)
 2. Create a new OAuth client in your dashboard
 3. Add credentials to `.env`:
@@ -136,13 +144,13 @@ A powerful web application that combines satellite imagery analysis with AI-powe
 
 ### Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GOOGLE_API_KEY` | Google Gemini API key for AI analysis | Yes |
-| `SH_CLIENT_ID` | Sentinel Hub OAuth client ID | Yes |
-| `SH_CLIENT_SECRET` | Sentinel Hub OAuth client secret | Yes |
-| `INSTANCE_ID` | Sentinel Hub instance ID | Yes |
-| `REDIS_URL` | Redis connection URL | Optional |
+| Variable           | Description                           | Required |
+| ------------------ | ------------------------------------- | -------- |
+| `GOOGLE_API_KEY`   | Google Gemini API key for AI analysis | Yes      |
+| `SH_CLIENT_ID`     | Sentinel Hub OAuth client ID          | Yes      |
+| `SH_CLIENT_SECRET` | Sentinel Hub OAuth client secret      | Yes      |
+| `INSTANCE_ID`      | Sentinel Hub instance ID              | Yes      |
+| `REDIS_URL`        | Redis connection URL                  | Optional |
 
 ## 📖 Usage
 
@@ -154,6 +162,7 @@ A powerful web application that combines satellite imagery analysis with AI-powe
 ## 🛠️ Development
 
 ### Project Structure
+
 ```
 geo-ai-monitor/
 ├── frontend/                 # React frontend
@@ -173,6 +182,7 @@ geo-ai-monitor/
 ### Build Commands
 
 **Frontend:**
+
 ```bash
 npm start          # Development server
 npm run build      # Production build
@@ -180,6 +190,7 @@ npm test           # Run tests
 ```
 
 **Backend:**
+
 ```bash
 uvicorn main:app --reload    # Development server
 uvicorn main:app --host 0.0.0.0 --port 8000  # Production
@@ -194,6 +205,7 @@ The backend provides a RESTful API with the following main endpoint:
 Generates AI analysis for a given area and time period.
 
 **Request Body:**
+
 ```json
 {
   "bbox": {
@@ -208,6 +220,7 @@ Generates AI analysis for a given area and time period.
 ```
 
 **Response:**
+
 ```json
 {
   "ai_response": "Analysis of geographical changes...",
@@ -236,14 +249,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Leaflet](https://leafletjs.com/) for interactive mapping
 - [FastAPI](https://fastapi.tiangolo.com/) for the robust backend framework
 - [React](https://reactjs.org/) for the frontend framework
-
-## 📞 Support
-
-If you encounter any issues or have questions:
-
-1. Check the [Issues](https://github.com/yourusername/geo-ai-monitor/issues) page
-2. Create a new issue with detailed description
-3. Contact the maintainers
 
 ## 🔮 Roadmap
 
